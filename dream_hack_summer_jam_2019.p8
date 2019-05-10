@@ -12,10 +12,12 @@ function _init()
 	globals.player.spd = 2
 	globals.player.flip_x = true
 	globals.player.shots = {}
+	globals.player_camera_y = 0
 
 	-- initialize camera position
 	globals.camera = {}
-	globals.camera.x_angle = 0
+	globals.camera.x = 0
+	globals.camera.y = 0
 
 	-- initialize the sky height
 	globals.sky_hgt = 64
@@ -38,7 +40,7 @@ function _update()
 		g.player.x -= g.player.spd
 
 	-- right
-	elseif(btn(1) and g.player.x + 16 < 128) then
+	elseif(btn(1) and g.player.x + 24 < 128) then
 		g.player.x += g.player.spd
 	end
 
@@ -48,17 +50,19 @@ function _update()
 		g.player.y -= g.player.spd
 
 	-- down
-	elseif(btn(3) and g.player.y + 24 < 128) then
+	elseif(btn(3) and g.player.y + 32 < 128) then
 		g.player.y += g.player.spd
 	end
 
 	-- decrease sky size when the player is high up
-	if(g.player.y <= 32 and g.sky_hgt > 32) then
-		g.sky_hgt -= 1
+	if(g.player.y <= 32 and g.camera.y > 0) then
+		g.camera.y -= 1
+		g.player_camera_y += 1
 
 	-- increase sky size when the player is low down
-	elseif(g.player.y + 24 >= 128-32 and g.sky_hgt < 128-32) then
-		g.sky_hgt += 1
+	elseif(g.player.y + 24 >= 128-32 and g.camera.y < 32) then
+		g.camera.y += 1
+		g.player_camera_y -= 1
 	end
 
 	-- flip the player depending on which side they are on
@@ -73,6 +77,7 @@ function _update()
 		local s = {}
 		s.x = g.player.x + 24 / 2 - 4
 		s.y = g.player.y + 32 / 2 - 4 - 4
+		s.camera_y = g.player_camera_y
 		s.timer = 0
 		add(g.player.shots, s)
 	end
@@ -97,20 +102,19 @@ function _draw()
 	-- draw the sky
 	--rectfill(0, 0, 128, globals.sky_hgt, 12)
 
-	line(0, g.sky_hgt - 14, 128, g.sky_hgt - 14, 7)
-	line(0, g.sky_hgt - 12, 128, g.sky_hgt - 12, 7)
-	line(0, g.sky_hgt - 10, 128, g.sky_hgt - 10, 7)
-	rectfill(0, g.sky_hgt - 8, 128, g.sky_hgt - 6, 7)
-	rectfill(0, g.sky_hgt - 4, 128, g.sky_hgt - 2, 7)
+	line(0, g.camera.y + 64 - 14, 128, g.camera.y + 64 - 14, 7)
+	line(0, g.camera.y + 64 - 12, 128, g.camera.y + 64 - 12, 7)
+	line(0, g.camera.y + 64 - 10, 128, g.camera.y + 64 - 10, 7)
+	rectfill(0, g.camera.y + 64 - 8, 128, g.camera.y + 64 - 6, 7)
+	rectfill(0, g.camera.y + 64 - 4, 128, g.camera.y + 64 - 2, 7)
 
 
 	-- draw the grass
-	rectfill(0, g.sky_hgt, 128, 128, 3)
+	rectfill(0, g.camera.y + 64, 128, 128, 3)
 
 	-- draw player projectiles
 	for i in all(g.player.shots) do
-		sspr(13*8, 0, 8, 8, i.x, i.y, 8/ceil(i.timer), 8/ceil(i.timer))
-		--spr(13, i.x, i.y)
+		sspr(13*8, 0, 8, 8, i.x, i.y + i.camera_y + g.camera.y, 8/ceil(i.timer), 8/ceil(i.timer))
 	end
 
 	-- draw the player
