@@ -55,14 +55,14 @@ function _update()
 	end
 
 	-- decrease sky size when the player is high up
-	if(g.player.y <= 32 and g.camera.y > 0) then
-		g.camera.y -= 1
-		g.player_camera_y += 1
-
-	-- increase sky size when the player is low down
-	elseif(g.player.y + 24 >= 128-32 and g.camera.y < 32) then
+	if(g.player.y <= 32 and g.camera.y < 32) then
 		g.camera.y += 1
 		g.player_camera_y -= 1
+
+	-- increase sky size when the player is low down
+	elseif(g.player.y + 24 >= 128-32 and g.camera.y > 0) then
+		g.camera.y -= 1
+		g.player_camera_y += 1
 	end
 
 	-- flip the player depending on which side they are on
