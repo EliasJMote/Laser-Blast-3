@@ -46,11 +46,13 @@ function update_enemies(g)
 				e.phase = 2
 			end
 		elseif(e.phase == 2) then
-			e.timer += 1
-			if(e.timer >= 90) then
+			if(e.timer == 0) then
+				-- spawn random enemy attack
+			elseif(e.timer >= 90) then
 				e.timer = 0
 				e.phase = 3
 			end
+			e.timer += 1
 		elseif(e.phase == 3) then
 			if(e.scale >= 0) then
 				e.scale -= 0.015
@@ -65,15 +67,32 @@ function update_enemies(g)
 		e.dw = e.scale * e.dw_init
 		e.dh = e.scale * e.dh_init
 
+		--printh("e.dw = " .. e.dw .. ", e.dh = " .. e.dh)
+
 		-- collision detection
+		-- temporarily add the camera position to enemy's y position
+		-- since the player's position is not relative to the camera
+		e.dy += g.camera.y
+
+		-- for each player shot
 		for s in all(g.player.shots) do
 			if(collision_detection(e,s)) then
+				-- delete shot
 				del(g.player.shots,s)
+
+				-- create particle effect
+
+				-- lower enemy health
 				e.health -= 1
-				if(e.health <= 1) then
-					del(g.enemies,e)
-				end
 			end
+		end
+
+		-- restore the enemy's position to normal
+		e.dy -= g.camera.y
+
+		-- eliminate the enemy when defeated
+		if(e.health <= 0) then
+			del(g.enemies,e)
 		end
 	end
 end
@@ -83,6 +102,7 @@ function draw_enemies(g)
 	palt(0, false)
 	for e in all(g.enemies) do
 		sspr(e.sx, e.sy, e.sw, e.sh, e.dx, g.camera.y + e.dy, e.dw*e.scale, e.dh*e.scale)
+		--sspr(e.sx, e.sy, e.sw, e.sh, e.dx, e.dy, e.dw*e.scale, e.dh*e.scale)
 	end
 	palt(11, false)
 	palt(0, true)
@@ -131,14 +151,13 @@ function update_player(g)
 	-- update player shots so they travel to the background
 	for s in all(g.player.shots) do
 		--s.timer += 0.05
-		s.scale -= 0.01
+		s.scale -= 0.05
 		s.dw = s.scale * 8
 		s.dh = s.scale * 8
 		if(s.scale <= 0) then
 			del(g.player.shots, s)
 		end
 	end
-
 end
 
 function draw_player(g)
@@ -178,10 +197,12 @@ function update_environment(g)
 
 	-- day/night cycle
 	-- update the sun and sky
-	g.sun.y = g.camera.y - 20 + g.timer / 30
+	if(g.time_of_day ~= night) then
+		g.sun.y += 0.02
+	end
 
 	-- transition to evening
-	if(g.time_of_day == "day" and g.sun.y >= g.camera.y + 45 and g.sun.y < g.camera.y + 70) then
+	if(g.time_of_day == "day" and g.sun.y >= 45 and g.sun.y < 70) then
 		g.sun.clr = 9
 		g.sky.clr = 10
 		g.clouds.clr = 14
@@ -189,7 +210,7 @@ function update_environment(g)
 		g.time_of_day = "evening"
 
 	-- transition to night
-	elseif(g.time_of_day == "evening" and g.sun.y > g.camera.y + 72) then
+	elseif(g.time_of_day == "evening" and g.sun.y > 72) then
 		g.sky.clr = 0
 		g.clouds.clr = 6
 		g.ground.clr = 5
@@ -208,7 +229,7 @@ function draw_environment(g)
 	rectfill(0, 0, 128, globals.sky_hgt + g.camera.y, g.sky.clr)
 
 	-- draw the sun
-	circfill(64, g.sun.y, 8, g.sun.clr)
+	circfill(64, g.camera.y  + g.sun.y, 8, g.sun.clr)
 
 	-- draw the cloud lines
 	line(0, g.camera.y + 64 - 14, 128, g.camera.y + 64 - 14, g.clouds.clr)
@@ -216,6 +237,15 @@ function draw_environment(g)
 	line(0, g.camera.y + 64 - 10, 128, g.camera.y + 64 - 10, g.clouds.clr)
 	rectfill(0, g.camera.y + 64 - 8, 128, g.camera.y + 64 - 6, g.clouds.clr)
 	rectfill(0, g.camera.y + 64 - 4, 128, g.camera.y + 64 - 2, g.clouds.clr)
+
+	-- draw the stars
+	if(g.time_of_day == "night") then
+		spr(14+flr(g.timer/8)%2, 64, g.camera.y + 32)
+		spr(14+flr(g.timer/8)%2, 32, g.camera.y + 16)
+		spr(14+flr(g.timer/8)%2, 18, g.camera.y + 30)
+		spr(14+flr(g.timer/8)%2, 85, g.camera.y + 8)
+		spr(14+flr(g.timer/8)%2, 47, g.camera.y - 20)
+	end
 
 	-- draw the ground
 	rectfill(0, g.camera.y + 64, 128, 128, g.ground.clr)
@@ -356,13 +386,13 @@ function _draw()
 
 end
 __gfx__
-00000000bbbbbbbb1111bbbbbbbbbbbbbbbbbbbb1111bbbbbbbbbbbbbbbbbbbb1111bbbbbbbbbbbbbbbbbbbb1111bbbbbbbbbbbb008888000030000000000000
-00000000bbbbbbbb1cc11bbbbbbbbbbbbbbbbbbb11c11bbbbbbbbbbbbbbbbbbb1cc11bbbbbbbbbbbbbbbbbbb11c11bbbbbbbbbbb088ee8800000030000000000
-00700700bbbbbbb11c111bbbbbbbbbbbbbbbbbb11c111bbbbbbbbbbbbbbbbbb11c111bbbbbbbbbbbbbbbbbb1111c1bbbbbbbbbbb88eeee880700003000000000
-00077000bbbbbbb111c11bbbbbbbbbbbbbbbbbb111111bbbbbbbbbbbbbbbbbb111111bbbbbbbbbbbbbbbbbb111111bbbbbbbbbbb8ee77ee80030000000000000
-00077000bbbbbb91c1111fbbbbbbbbbbbbbbbb91c1111fbbbbbbbbbbbbbbbb91c1111fbbbbbbbbbbbbbbbb91c1111fbbbbbbbbbb8ee77ee80030070000000000
-00700700bbbbbf91c11119fbbbbbbbbbbbbbbf91c11119fbbbbbbbbbbbbbbf91c11119fbbbbbbbbbbbbbbf91111119fbbbbbbbbb88eeee880000300000000000
-00000000bbbbf991c1111990bbbbbbbbbbbbf991c1111990bbbbbbbbbbbbf991c1111990bbbbbbbbbbbbf99111111990bbbbbbbb088ee8800000300000000000
+00000000bbbbbbbb1111bbbbbbbbbbbbbbbbbbbb1111bbbbbbbbbbbbbbbbbbbb1111bbbbbbbbbbbbbbbbbbbb1111bbbbbbbbbbbb008888000000000000000000
+00000000bbbbbbbb1cc11bbbbbbbbbbbbbbbbbbb11c11bbbbbbbbbbbbbbbbbbb1cc11bbbbbbbbbbbbbbbbbbb11c11bbbbbbbbbbb088ee8800007000007070700
+00700700bbbbbbb11c111bbbbbbbbbbbbbbbbbb11c111bbbbbbbbbbbbbbbbbb11c111bbbbbbbbbbbbbbbbbb1111c1bbbbbbbbbbb88eeee880007000000777000
+00077000bbbbbbb111c11bbbbbbbbbbbbbbbbbb111111bbbbbbbbbbbbbbbbbb111111bbbbbbbbbbbbbbbbbb111111bbbbbbbbbbb8ee77ee80777770007777700
+00077000bbbbbb91c1111fbbbbbbbbbbbbbbbb91c1111fbbbbbbbbbbbbbbbb91c1111fbbbbbbbbbbbbbbbb91c1111fbbbbbbbbbb8ee77ee80007000000777000
+00700700bbbbbf91c11119fbbbbbbbbbbbbbbf91c11119fbbbbbbbbbbbbbbf91c11119fbbbbbbbbbbbbbbf91111119fbbbbbbbbb88eeee880007000007070700
+00000000bbbbf991c1111990bbbbbbbbbbbbf991c1111990bbbbbbbbbbbbf991c1111990bbbbbbbbbbbbf99111111990bbbbbbbb088ee8800000000000000000
 00000000bbbb001cc11119900bbbbbbbbbbb001c111119900bbbbbbbbbbb001cc11119900bbbbbbbbbbb0001c11119900bbbbbbb008888000000000000000000
 00000000bbb0001c1111190000bbbbbbbbb0001c1111190000bbbbbbbbb0001c1111190000bbbbbbbbb00001c111190000bbbbbb000000000000000000000000
 00000000bbb0001c11c199b00099bbbbbbb0011111c199b00099bbbbbbb0001c111199b00099bbbbbbb000b1c11119b00099bbbb000000000000000000000000
