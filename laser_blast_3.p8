@@ -1,16 +1,123 @@
 pico-8 cartridge // http://www.pico-8.com
 version 17
 __lua__
+------ helper functions ------
 -- rectangular collision deteciton
 function collision_detection(a,b)
-	if(a.dx < b.dx + b.dw and
-	a.dx + a.dw > b.dx and
-	a.dy < b.dy + b.dh and
-	a.dy + a.dh > b.dy) then
+	if(a.x < b.x + b.w and
+	a.x + a.w > b.x and
+	a.y < b.y + b.h and
+	a.y + a.h > b.y) then
 		return true
 	else
 		return false
 	end
+end
+
+function create_game(g)
+	-- initialize the player
+	g.player = {}
+	g.player.x = 56
+	g.player.y = 56
+	g.player.w = 24
+	g.player.h = 32
+	g.player.spr = 1
+	g.player.spd = 2
+	g.player.flip_x = true
+	g.player.shots = {}
+	g.player_camera_y = 0
+	g.player.health = 3
+	g.player.death_timer = 0
+
+	-- initialize camera position
+	g.camera = {}
+	g.camera.x = 0
+	g.camera.y = 0
+
+	-- initialize the sky height
+	g.sky_hgt = 64
+	
+	-- initialize the game timer
+	g.timer = 0
+
+	-- initialize enemy types
+	g.enemy_types = {}
+
+	-- dragon head
+	g.enemy_types.dragon_head = {
+									sx = 72,
+									sy = 32,
+									sw = 16,
+									sh = 16,
+									w = 16,
+									h = 16,
+									ai = 2,
+									num_frames = 1
+								}
+
+
+	g.enemy_types.fairy =   {
+								sx = 24,
+								sy = 32,
+								sw = 24,
+								sh = 32,
+								w = 24,
+								h = 32,
+								ai = 1,
+								num_frames = 2
+							}
+
+	g.enemy_types.wizard = 	{
+								sx = 0,
+								sy = 32,
+								sw = 20,
+								sh = 32,
+								w = 20,
+								h = 32,
+								ai = 1,
+								num_frames = 1,
+								health = 10
+							}
+
+	-- initialize the enemies
+	g.enemies = {}
+	create_enemy(g.enemy_types.dragon_head, 64, 48, g)
+
+	-- initialize the enemy shots
+	g.enemy_shots = {}
+
+	-- initialize the time of day
+	g.time_of_day = "day"
+
+	-- initialize the sun
+	g.sun = {}
+	g.sun.y = -20
+	g.sun.clr = 10
+
+	-- initialize the sky
+	g.sky = {}
+	g.sky.clr = 12
+
+	-- initialize the clouds
+	g.clouds = {}
+	g.clouds.clr = 7
+
+	-- initialize the ground
+	g.ground = {}
+	g.ground.clr = 11
+
+	g.init_scale = 0.75
+	g.scale_factor = 0.04
+
+	-- initialize horizontal lines
+	g.horizontal_lines = {}
+	for i=1,5 do
+		g.horizontal_lines[i] = {}
+		g.horizontal_lines[i].y = 64 + 16 * i
+	end
+
+	-- initialize the game state
+	g.state = "title"
 end
 
 -- calculate an angle between two objects
@@ -37,185 +144,45 @@ function calculate_angle(a,b)
   return theta
 end
 
-function create_enemy(sx, sy, sw, sh, dx, dy, dw, dh, ai, g, frame)
+------ create functions ------
+function create_enemy(enemy, x, y, g)
 	local e = {}
-	e.sx = sx or 0
-	e.sy = sy or 0
-	e.sw = sw or 0
-	e.sh = sh or 0
-	e.dx = dx or 0
-	e.dy = dy or 0
-	e.x = e.dx
-	e.y = e.dy
-	e.dy_init = e.dy
-	e.dw = dw or 0
-	e.dh = dh or 0
-	e.dw_init = e.dw
-	e.dh_init = e.dh
-	e.frame = frame or 1
+	e.sx = enemy.sx or 0
+	e.sy = enemy.sy or 0
+	e.sw = enemy.sw or 0
+	e.sh = enemy.sh or 0
+	e.x = x or 0
+	e.y = y or 0
+	e.y_init = y or 64
+	e.w = enemy.w or 0
+	e.h = enemy.h or 0
+	e.w_init = enemy.w or 0
+	e.h_init = enemy.h or 0
+	e.num_frames = enemy.num_frames or 1
 	e.scale = 0
 	e.depth = 3
-	e.ai = ai or 1
+	e.ai = enemy.ai or 1
 	e.phase = 1
 	e.timer = 0
-	e.health = 10
+	e.health = enemy.health or 3
 	add(g.enemies, e)
 end
 
 function create_enemy_shot(g, e)
 	local s = {}
-	s.x = e.dx + e.dw / 2
-	s.y = e.dy + e.dh / 2
+	s.x = e.x + e.w / 2
+	s.y = e.y + e.h / 2
+	s.w = 6
+	s.h = 6
 	local p = {}
 	p.x = g.player.x + 12 / 2
 	p.y = g.player.y + 24 / 2
 	s.angle = calculate_angle(s,p)
-	printh(s.angle)
 	s.spd = 2
 	add(g.enemy_shots, s)
 end
 
-function update_enemies(g)
-	for e in all(g.enemies) do
-		-- for ai pattern one (approach, leave, teleport)
-		if(e.ai == 1) then
-			-- update based on phase
-			if(e.phase == 1) then
-				if(e.scale <= 1) then
-					e.scale += 0.015
-				else
-					e.scale = 1
-					e.phase = 2
-				end
-			elseif(e.phase == 2) then
-				if(e.timer == 0) then
-					-- spawn random enemy attack
-				elseif(e.timer >= 90) then
-					e.timer = 0
-					e.phase = 3
-				end
-				e.timer += 1
-			elseif(e.phase == 3) then
-				if(e.scale >= 0) then
-					e.scale -= 0.015
-				else
-					e.scale = 0
-					e.phase = 1
-					e.dx = flr(rnd(80)) + 30
-				end
-			end
-
-		elseif(e.ai == 2) then
-
-			if(e.phase == 1) then
-				e.dx -= 1
-				if(e.dx <= 0) then
-					e.dx = 0
-					e.phase = 2
-				end
-			elseif(e.phase == 2) then
-				e.dx += 1
-				if(e.dx >= 128-16) then
-					e.dx = 128-16
-					e.phase = 1
-				end
-			end
-
-			-- move up and down in a sine wave
-			e.dy = e.dy_init + 10*sin(e.timer/50)
-
-			-- approaching
-			if(e.scale < 1) then
-				e.scale += 0.015
-
-			-- arrival
-			else
-				e.scale = 1
-
-				-- shoot projectiles periodically
-				if(e.timer % 90 == 0) then
-					create_enemy_shot(g,e)
-				end
-			end
-			--printh("Yes")
-
-			-- update enemy timer
-			e.timer += 1
-		end
-
-		-- update depth based on scale
-		if(e.scale >= 0.66) then
-			e.depth = 3
-		elseif(e.scale >= 0.33) then
-			e.depth = 2
-		else
-			e.depth = 1
-		end
-
-		-- update dw and dh
-		e.dw = e.scale * e.dw_init
-		e.dh = e.scale * e.dh_init
-
-		-- collision detection
-		-- temporarily add the camera position to enemy's y position
-		-- since the player's position is not relative to the camera
-		e.dy += g.camera.y
-
-		-- for each player shot
-		for s in all(g.player.shots) do
-			if(e.depth == s.depth and collision_detection(e,s)) then
-				-- delete shot
-				del(g.player.shots,s)
-
-				-- create particle effect
-
-				-- lower enemy health
-				e.health -= 1
-			end
-		end
-
-		-- restore the enemy's position to normal
-		e.dy -= g.camera.y
-
-		-- eliminate the enemy when defeated
-		if(e.health <= 0) then
-			del(g.enemies,e)
-		end
-	end
-
-	update_enemy_shots(g)
-end
-
-function update_enemy_shots(g)
-	for s in all(g.enemy_shots) do
-		s.x -= s.spd * cos(s.angle)
-		s.y -= s.spd * sin(s.angle)
-	end
-end
-
-function draw_enemies(g)
-	palt(5, true)
-	palt(0, false)
-	for e in all(g.enemies) do
-		--sspr(e.sx+e.sw*(flr(g.timer/3)%e.frame), e.sy, e.sw, e.sh, e.dx, g.camera.y + e.dy, e.dw*e.scale, e.dh*e.scale)
-		sspr(e.sx+e.sw*(flr(g.timer/3)%e.frame), e.sy, e.sw, e.sh, e.dx, g.camera.y + e.dy, e.dw, e.dh)
-		--sspr(e.sx, e.sy, e.sw, e.sh, e.dx, e.dy, e.dw*e.scale, e.dh*e.scale)
-	end
-	palt(5, false)
-	palt(0, true)
-	draw_enemy_shots(g)
-end
-
-function draw_enemy_shots(g)
-	for s in all(g.enemy_shots) do
-		if(g.timer % 4 <= 1) then
-			circfill(s.x, g.camera.y + s.y, 3, 8)
-		else
-			circfill(s.x, g.camera.y + s.y, 3, 12)
-		end
-	end
-end
-
+------ update functions ------
 function update_player(g)
 	-- horizontal player movement --
 	-- left
@@ -247,19 +214,20 @@ function update_player(g)
 	-- spawn player attack
 	if(btnp(4)) then
 		local s = {}
-		s.dx = g.player.x + 24 / 2 - 4
-		s.dy = g.player.y + 32 / 2 - 4 - 4
+		s.x = g.player.x + 24 / 2 - 4
+		s.y = g.player.y + 32 / 2 - 4 - 4
 		s.camera_y = g.player_camera_y
 		s.scale = 1
-		s.dw = s.scale * 8
-		s.dh = s.scale * 8
+		s.w = s.scale * 8
+		s.h = s.scale * 8
 		add(g.player.shots, s)
 	end
 
 	-- update player shots so they travel to the background
 	for s in all(g.player.shots) do
 		-- shot travels to background, so decrease scale
-		s.scale -= 0.05
+		--s.scale -= 0.05
+		s.scale -= 0.04
 
 		-- update depth based on scale
 		if(s.scale >= 0.66) then
@@ -271,35 +239,159 @@ function update_player(g)
 		end
 
 		-- update width and height based on scale
-		s.dw = s.scale * 8
-		s.dh = s.scale * 8
+		s.w = s.scale * 8
+		s.h = s.scale * 8
 		if(s.scale <= 0) then
 			del(g.player.shots, s)
 		end
 	end
+
+	-- update death timer if player is out of health
+	if(g.player.health <= 0) then
+		g.player.death_timer += 1
+		if(g.player.death_timer >= 90) then
+			create_game(g)
+		end
+	end
 end
 
-function draw_player(g)
-	-- draw player projectiles
-	for s in all(g.player.shots) do
-		sspr(13*8, 0, 8, 8, s.dx, s.dy + s.camera_y + g.camera.y, s.dw, s.dh)
+function update_enemies(g)
+	for e in all(g.enemies) do
+		-- for ai pattern one (approach, leave, teleport)
+		if(e.ai == 1) then
+			-- update based on phase
+			if(e.phase == 1) then
+				if(e.scale <= 1) then
+					e.scale += 0.015
+				else
+					e.scale = 1
+					e.phase = 2
+				end
+			elseif(e.phase == 2) then
+				if(e.timer == 0) then
+					-- spawn random enemy attack
+				elseif(e.timer >= 90) then
+					e.timer = 0
+					e.phase = 3
+				end
+				e.timer += 1
+			elseif(e.phase == 3) then
+				if(e.scale >= 0) then
+					e.scale -= 0.015
+				else
+					e.scale = 0
+					e.phase = 1
+					e.x = flr(rnd(80)) + 30
+				end
+			end
+
+		elseif(e.ai == 2) then
+
+			if(e.phase == 1) then
+				e.x -= 1
+				if(e.x <= 0) then
+					e.x = 0
+					e.phase = 2
+				end
+			elseif(e.phase == 2) then
+				e.x += 1
+				if(e.x >= 128-16) then
+					e.x = 128-16
+					e.phase = 1
+				end
+			end
+
+			-- move up and down in a sine wave
+			e.y = e.y_init + 10*sin(e.timer/50)
+
+			-- approaching
+			if(e.scale < 1) then
+				e.scale += 0.015
+
+			-- arrival
+			else
+				e.scale = 1
+
+				-- shoot projectiles periodically
+				if(e.timer % 90 == 0) then
+					create_enemy_shot(g,e)
+				end
+			end
+			--printh("Yes")
+
+			-- update enemy timer
+			e.timer += 1
+		end
+
+		-- update depth based on scale
+		if(e.scale >= 0.66) then
+			e.depth = 3
+		elseif(e.scale >= 0.33) then
+			e.depth = 2
+		else
+			e.depth = 1
+		end
+
+		-- update w and h
+		e.w = e.scale * e.w_init
+		e.h = e.scale * e.h_init
+
+		-- collision detection
+		-- temporarily add the camera position to enemy's y position
+		-- since the player's position is not relative to the camera
+		e.y += g.camera.y
+
+		-- for each player shot
+		for s in all(g.player.shots) do
+			if(e.depth == s.depth and collision_detection(e,s)) then
+				-- delete shot
+				del(g.player.shots,s)
+
+				-- create particle effect
+
+				-- lower enemy health
+				e.health -= 1
+			end
+		end
+
+		-- restore the enemy's position to normal
+		e.y -= g.camera.y
+
+		-- eliminate the enemy when defeated
+		if(e.health <= 0) then
+			del(g.enemies,e)
+		end
 	end
 
-	-- draw the player's shadow
-	if not (g.player.flip_x) then
-		circfill(g.player.x + 10, 123, 4, 0)
-	else
-		circfill(g.player.x + 13, 123, 4, 0)
-	end
+	update_enemy_shots(g)
+end
 
-	-- draw the player
-	palt(11, true)
-	palt(0, false)
-	if(g.time_of_day == "night") then pal(0, 1) end
-	spr(g.player.spr+3*(flr(g.timer / 6) % 4), g.player.x, g.player.y, 3, 4, g.player.flip_x)
-	if(g.time_of_day == "night") then pal(0, 0) end
-	palt(11, false)
-	palt(0, true)
+function update_enemy_shots(g)
+	for s in all(g.enemy_shots) do
+		s.x -= s.spd * cos(s.angle)
+		s.y -= s.spd * sin(s.angle)
+
+		-- collision detection
+		-- temporarily add the camera position to enemy shot's y position
+		-- since the player's position is not relative to the camera
+		s.y += g.camera.y
+
+		-- for each player shot
+		if(collision_detection(s,g.player)) then
+			-- delete shot
+			del(g.enemy_shots,s)
+
+			-- create particle effect
+
+			-- lower enemy health
+			g.player.health -= 1
+		end
+
+		-- restore the enemy shot's position to normal
+		s.y -= g.camera.y
+
+
+	end
 end
 
 function update_environment(g)
@@ -335,12 +427,74 @@ function update_environment(g)
 		g.clouds.clr = 6
 		g.ground.clr = 5
 		g.time_of_day = "night"
+		create_enemy(g.enemy_types.wizard, 64, 48, g)
 	end
 
 	-- move horizontal lines forward
 	for h in all(g.horizontal_lines) do
 		h.y += 1
 		if(h.y > 128) then h.y = 64 end
+	end
+end
+
+------ draw functions ------
+function draw_player(g)
+	-- draw player projectiles
+	for s in all(g.player.shots) do
+		sspr(13*8, 0, 8, 8, s.x, s.y + s.camera_y + g.camera.y, s.w, s.h)
+	end
+
+	-- draw the player if they are alive
+	if(g.player.health > 0) then
+
+		-- draw the player's shadow
+		if not (g.player.flip_x) then
+			circfill(g.player.x + 10, 123, 4, 0)
+		else
+			circfill(g.player.x + 13, 123, 4, 0)
+		end
+
+		-- draw the player
+		palt(11, true)
+		palt(0, false)
+		if(g.time_of_day == "night") then pal(0, 1) end
+		spr(g.player.spr+3*(flr(g.timer / 6) % 4), g.player.x, g.player.y, 3, 4, g.player.flip_x)
+		if(g.time_of_day == "night") then pal(0, 0) end
+		palt(11, false)
+		palt(0, true)
+
+		-- draw the player's health
+		for i=1,g.player.health do
+			rectfill(96+i*8,116,100+i*8,124,8)
+		end
+
+	else
+		rectfill(46, 46, 84, 54, 0)
+		color(7)
+		print("game over", 48, 48)
+	end
+end
+
+function draw_enemies(g)
+	palt(5, true)
+	palt(0, false)
+	for e in all(g.enemies) do
+		--sspr(e.sx+e.sw*(flr(g.timer/3)%e.frame), e.sy, e.sw, e.sh, e.x, g.camera.y + e.y, e.w*e.scale, e.h*e.scale)
+		sspr(e.sx+e.sw*(flr(g.timer/3)%e.num_frames), e.sy, e.sw, e.sh, e.x, g.camera.y + e.y, e.w, e.h)
+		--sspr(e.sx, e.sy, e.sw, e.sh, e.x, e.y, e.w*e.scale, e.h*e.scale)
+	end
+	palt(5, false)
+	palt(0, true)
+	draw_enemy_shots(g)
+end
+
+function draw_enemy_shots(g)
+	for s in all(g.enemy_shots) do
+		if(g.timer % 4 <= 1) then
+			circfill(s.x, g.camera.y + s.y, 3, 8)
+		else
+			circfill(s.x, g.camera.y + s.y, 3, 12)
+		end
 	end
 end
 
@@ -392,124 +546,96 @@ function _init()
 	globals = {}
 	local g = globals
 
-	-- initialize the player
-	g.player = {}
-	g.player.x = 56
-	g.player.y = 56
-	g.player.spr = 1
-	g.player.spd = 2
-	g.player.flip_x = true
-	g.player.shots = {}
-	g.player_camera_y = 0
-
-	-- initialize camera position
-	g.camera = {}
-	g.camera.x = 0
-	g.camera.y = 0
-
-	-- initialize the sky height
-	g.sky_hgt = 64
-	
-	-- initialize the game timer
-	g.timer = 0
-
-	-- initialize the enemies
-	g.enemies = {}
-	--create_enemy(0, 32, 20, 32, 56, 48, 20, 32, 1, g)
-	--create_enemy(24, 32, 24, 32, 80, 48, 24, 32, 1, g, 2)
-	create_enemy(72, 32, 16, 16, 32, 48, 16, 16, 2, g, 1)
-
-	-- initialize the enemy shots
-	g.enemy_shots = {}
-
-	-- initialize the time of day
-	g.time_of_day = "day"
-
-	-- initialize the sun
-	g.sun = {}
-	g.sun.y = -20
-	g.sun.clr = 10
-
-	-- initialize the sky
-	g.sky = {}
-	g.sky.clr = 12
-
-	-- initialize the clouds
-	g.clouds = {}
-	g.clouds.clr = 7
-
-	g.ground = {}
-	g.ground.clr = 11
-
-	g.init_scale = 0.75
-	g.scale_factor = 0.04
-
-	-- initialize horizontal lines
-	g.horizontal_lines = {}
-	for i=1,5 do
-		g.horizontal_lines[i] = {}
-		g.horizontal_lines[i].y = 64 + 16 * i
-	end
+	create_game(g)
 end
 
 function _update()
 
 	local g = globals
 
-	-- update the player
-	update_player(g)
+	if(g.state == "title") then
+		if(btnp(4)) then g.state = "tutorial" end
 
-	-- update enemies
-	update_enemies(g)
+	elseif(g.state == "tutorial") then
+		if(btnp(4)) then g.state = "game" end
 
-	-- update environment
-	update_environment(g)
+	elseif(g.state == "game") then
 
-	-- move the terrain forward
-	--[[for t in all(g.terrain) do
-		t.y += 1
-		if(t.x < 64) then
-			t.x -= 0.25
-			if(t.x <= -16) then
-				t.x = t.x_init
+		-- update the player
+		update_player(g)
+
+		-- update enemies
+		update_enemies(g)
+
+		-- update environment
+		update_environment(g)
+
+		-- move the terrain forward
+		--[[for t in all(g.terrain) do
+			t.y += 1
+			if(t.x < 64) then
+				t.x -= 0.25
+				if(t.x <= -16) then
+					t.x = t.x_init
+				end
+			else
+				t.x += 0.25
+				if(t.x >= 128+16) then
+					t.x = t.x_init
+				end
 			end
-		else
-			t.x += 0.25
-			if(t.x >= 128+16) then
-				t.x = t.x_init
+			t.scale += g.scale_factor
+			if(t.y > 128) then
+				t.y = 64
+				t.scale = g.init_scale
 			end
-		end
-		t.scale += g.scale_factor
-		if(t.y > 128) then
-			t.y = 64
-			t.scale = g.init_scale
-		end
-	end]]
+		end]]
 
-	-- update game timer
-	g.timer = (g.timer + 1) % 32000
+		-- update game timer
+		g.timer = (g.timer + 1) % 32000
+	end
 end
 
 function _draw()
 	local g = globals
 	cls()
 
-	-- draw the backgrounds
-	draw_environment(g)
+	if(g.state == "title") then
+		local margin = 4
+		print("laser blast! 3", 40, margin)
+		print("press z/\142 to start", 32, 104)
+		print("v0.3.0", 105-margin, 123-margin)
 
-	-- draw the terrain
-	--[[for t in all(g.terrain) do
-		--spr(t.spr, t.x, t.y + g.camera.y)
-		sspr(t.spr*8, 0, 8, 8, t.x, t.y + g.camera.y, t.scale * 8, t.scale * 8)
-	end]]
-	
+	elseif(g.state == "tutorial") then
+		local margin = 4
+		print("how to play:", 0, margin)
+		print("use the directional keys to move", 0, 20)
+		print("use the z/\142 key to shoot", 0, 40)
+		print("dodge enemy shots that come", 0, 60)
+		print("after you. moving up or down", 0, 70)
+		print("shifts the perspective.", 0, 80)
+		print("when the sun sets, defeat the", 0, 90)
+		print("level boss", 0, 100)
+		print("press z/\142 to play.", 0, 120-margin)
 
-	-- draw the enemies
-	draw_enemies(g)
+	elseif(g.state == "game") then
 
-	-- draw the player
-	draw_player(g)
+		-- draw the backgrounds
+		draw_environment(g)
 
+		-- draw the terrain
+		--[[for t in all(g.terrain) do
+			--spr(t.spr, t.x, t.y + g.camera.y)
+			sspr(t.spr*8, 0, 8, 8, t.x, t.y + g.camera.y, t.scale * 8, t.scale * 8)
+		end]]
+		
+
+		-- draw the enemies
+		draw_enemies(g)
+
+		-- draw the player
+		draw_player(g)
+	end
 end
 __gfx__
 00000000bbbbbbbb1111bbbbbbbbbbbbbbbbbbbb1111bbbbbbbbbbbbbbbbbbbb1111bbbbbbbbbbbbbbbbbbbb1111bbbbbbbbbbbb008888000000000000000000
@@ -520,14 +646,14 @@ __gfx__
 00700700bbbbbf91c11119fbbbbbbbbbbbbbbf91c11119fbbbbbbbbbbbbbbf91c11119fbbbbbbbbbbbbbbf91111119fbbbbbbbbb88eeee880007000007070700
 00000000bbbbf991c1111990bbbbbbbbbbbbf991c1111990bbbbbbbbbbbbf991c1111990bbbbbbbbbbbbf99111111990bbbbbbbb088ee8800000000000000000
 00000000bbbb001cc11119900bbbbbbbbbbb001c111119900bbbbbbbbbbb001cc11119900bbbbbbbbbbb0001c11119900bbbbbbb008888000000000000000000
-00000000bbb0001c1111190000bbbbbbbbb0001c1111190000bbbbbbbbb0001c1111190000bbbbbbbbb00001c111190000bbbbbb000000000000000000000000
-00000000bbb0001c11c199b00099bbbbbbb0011111c199b00099bbbbbbb0001c111199b00099bbbbbbb000b1c11119b00099bbbb000000000000000000000000
-00000000bbb00011c11199bb097f9bbbbbb001c1111199bb097f9bbbbbb00011c1c199bb097f9bbbbbb000b1c11199bb097f9bbb000000000000000000000000
-00000000bbb00b1111100bbbb9f7fbbbbbb00b1111100bbbb9f7fbbbbbb00b1111100bbbb9f7fbbbbbb00bb11c110bbbb9f7fbbb000000000000000000000000
-00000000bbb00b1c11100bbbbb9f7bbbbbb00bbb00000bbbbb9f7bbbbbb00b1c11100bbbbb9f7bbbbbb00bbb11100bbbbb9f7bbb000000000000000000000000
-00000000bbb00bb111000bbbbbbbbbbbbbb00bbb00000bbbbbbbbbbbbbb00bb111000bbbbbbbbbbbbbb00bbb00000bbbbbbbbbbb000000000000000000000000
-00000000bbb099bb00000bbbbbbbbbbbbbb099bb00000bbbbbbbbbbbbbb099bb00000bbbbbbbbbbbbbb099bb00000bbbbbbbbbbb000000000000000000000000
-00000000bbb999b9999999bbbbbbbbbbbbb999b9999999bbbbbbbbbbbbb999b9999999bbbbbbbbbbbbb999b9999999bbbbbbbbbb000000000000000000000000
+00000000bbb0001c1111190000bbbbbbbbb0001c1111190000bbbbbbbbb0001c1111190000bbbbbbbbb00001c111190000bbbbbb008888888888880000000000
+00000000bbb0001c11c199b00099bbbbbbb0011111c199b00099bbbbbbb0001c111199b00099bbbbbbb000b1c11119b00099bbbb088eeeeeeeeee88000000000
+00000000bbb00011c11199bb097f9bbbbbb001c1111199bb097f9bbbbbb00011c1c199bb097f9bbbbbb000b1c11199bb097f9bbb88ee77777777ee8800000000
+00000000bbb00b1111100bbbb9f7fbbbbbb00b1111100bbbb9f7fbbbbbb00b1111100bbbb9f7fbbbbbb00bb11c110bbbb9f7fbbb8ee7777777777ee800000000
+00000000bbb00b1c11100bbbbb9f7bbbbbb00bbb00000bbbbb9f7bbbbbb00b1c11100bbbbb9f7bbbbbb00bbb11100bbbbb9f7bbb8ee7777777777ee800000000
+00000000bbb00bb111000bbbbbbbbbbbbbb00bbb00000bbbbbbbbbbbbbb00bb111000bbbbbbbbbbbbbb00bbb00000bbbbbbbbbbb88ee77777777ee8800000000
+00000000bbb099bb00000bbbbbbbbbbbbbb099bb00000bbbbbbbbbbbbbb099bb00000bbbbbbbbbbbbbb099bb00000bbbbbbbbbbb088eeeeeeeeee88000000000
+00000000bbb999b9999999bbbbbbbbbbbbb999b9999999bbbbbbbbbbbbb999b9999999bbbbbbbbbbbbb999b9999999bbbbbbbbbb008888888888880000000000
 00000000bbbb99b99ff999bbbbbbbbbbbbbb99b99ff999bbbbbbbbbbbbbb99b99ff999bbbbbbbbbbbbbb99b99ff999bbbbbbbbbb000000000000000000000000
 00000000bbbbbbb9f999999bbbbbbbbbbbbbbbb9f999999bbbbbbbbbbbbbbbb9f999999bbbbbbbbbbbbbbbb9f999999bbbbbbbbb000000000000000000000000
 00000000bbbbbb999999999bbbbbbbbbbbbbbb999999999bbbbbbbbbbbbbbb999999999bbbbbbbbbbbbbbb999999999bbbbbbbbb000000000000000000000000
